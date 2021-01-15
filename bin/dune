@@ -1,0 +1,4 @@
+(executable
+ (public_name ocello_ai)
+ (name main)
+ (libraries ocello_ai))

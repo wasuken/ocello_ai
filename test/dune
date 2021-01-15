@@ -1,0 +1,6 @@
+(library
+ (name ocello_ai_test)
+ (inline_tests)
+ (libraries ocello_ai)
+ (preprocess (pps ppx_inline_test))
+ )
