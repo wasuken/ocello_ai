@@ -1,2 +1,3 @@
 (library
- (name ocello_ai))
+ (name ocello_ai)
+ (libraries torch base))

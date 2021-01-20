@@ -106,17 +106,17 @@ let turn_over_line x y v_x v_y user map =
 let around_turn_over_line x y user map =
   let indexes = [| -1; 0; 1; |] in
   let m = ref map in
-  Array.iter
+  let _ = Array.iter
     (fun i ->
       Array.iter
         (fun j -> if x == 0 && y == 0
                   then ()
-                  else m := (turn_over_line x y i j user !m))
+                  else m := turn_over_line x y i j user !m)
         indexes)
-    indexes
+    indexes in
+  !m
 
-
-let can_put map user =
+let can_put user map f =
   let en = enemy_panel user in
   let exists area =
     Array.exists
@@ -126,8 +126,45 @@ let can_put map user =
     (fun i line ->
       Array.mapi
         (fun j x ->
-          x == Emp &&
-            exists (around_area j i map) &&
-              around_search j i user map)
+          f i j (x == Emp &&
+               exists (around_area j i map) &&
+                 around_search j i user map))
         line)
     map
+
+let can_put_ptr user map =
+  let f i j b = if b then (i, j) else (-1, -1) in
+  can_put user map f
+  |> Array.to_list
+  |> Array.concat
+  |> Array.to_list
+  |> List.filter (fun (i, _) -> i > -1)
+
+let is_finish map =
+  Array.for_all (fun line -> Array.for_all (fun x -> x <> Emp) line) map
+
+let count_stone_in_map stone map =
+  Array.fold_left
+    (fun asm line ->
+      asm + (Array.fold_left
+               (fun a x -> a + (if x = stone then 1 else 0))
+               0
+               line)
+    )
+    0
+    map
+
+let score_closure map =
+  let total_fst = count_stone_in_map Fst map in
+  let total_snd = count_stone_in_map Snd map in
+  let total_f winner f = f total_fst total_snd winner in
+  if total_fst > total_snd
+  then total_f Fst
+  else
+    if total_fst < total_snd
+    then total_f Snd
+    else total_f Emp
+
+let min_max_move user map =
+  let moves = can_put_ptr user map in
+  moves
