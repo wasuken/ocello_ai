@@ -150,10 +150,10 @@ let can_put user map f =
   Array.mapi
     (fun i line ->
       Array.mapi
-        (fun j x ->
-          f i j (x == Emp &&
-               exists (around_area i j map) &&
-                 around_search i j user map))
+        (fun j _ ->
+          f i j ((get i j map) = Emp &&
+                   exists (around_area i j map) &&
+                     around_search i j user map))
         line)
     map;;
 
@@ -195,7 +195,8 @@ let min_max_move user map =
   moves;;
 
 let shuffle d =
-  let nd = List.map (fun c -> (Random.bits (), c)) d in
+  let nd = List.map (fun c ->
+               (Random.bits (Random.self_init ()), c)) d in
   let sond = List.sort compare nd in
   List.map snd sond;;
 
@@ -206,7 +207,13 @@ let rec cpu_battle map user =
   let _ = List.iter (fun (x,y) -> Printf.printf "%d-%d\n" x y) moves in
   let en = enemy_panel user in
   if is_finish map
-  then print_endline "finish."
+  then
+    let _ = score_closure map (fun w l wu ->
+        Printf.printf "winner:%s win_cnt=%d, lose_cnt=%d\n"
+          (panel_to_string wu)
+          w
+          l) in
+    print_endline "finish."
   else
     if (List.length moves) + (List.length (can_put_ptr en map)) <= 0
     then print_endline "no moves"
