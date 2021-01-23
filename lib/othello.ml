@@ -1,6 +1,24 @@
 let width = 8;;
 let height = 8;;
 
+(* 参考: https://aidiary.hatenablog.com/entry/20050121/1274149979 *)
+let eval_array = [|
+    [| 120; -20; 20;  5;  5; 20; -20; 120; |];
+    [| -20; -40; -5; -5; -5; -5; -40; -20; |];
+    [|  20;  -5; 15;  3;  3; 15;  -5;  20; |];
+    [|   5;  -5;  3;  3;  3;  3;  -5;   5; |];
+    [|   5;  -5;  3;  3;  3;  3;  -5;   5; |];
+    [|  20;  -5; 15;  3;  3; 15;  -5;  20; |];
+    [| -20; -40; -5; -5; -5; -5; -40; -20; |];
+    [| 120; -20; 20;  5;  5; 20; -20; 120; |];
+  |];;
+
+let shuffle d =
+  let nd = List.map (fun c ->
+               (Random.bits (Random.self_init ()), c)) d in
+  let sond = List.sort compare nd in
+  List.map snd sond;;
+
 type panel = Fst | Snd | Emp | Out;;
 
 let panel_to_string v =
@@ -55,7 +73,7 @@ let set x y p map =
 let gen_map x y v =
   Array.make_matrix x y v;;
 
-let default_gen_map =
+let default_gen_map () =
   let map = gen_map width height Emp in
   set 3 3 Fst map
   |> set 4 4 Fst
@@ -190,47 +208,83 @@ let score_closure map =
     then total_f Snd
     else total_f Emp;;
 
-let min_max_move user map =
-  let moves = can_put_ptr user map in
-  moves;;
+let set_eval x y user map =
+  let set_map = set x y user map in
+  around_turn_over_line x y user set_map;;
 
-let shuffle d =
-  let nd = List.map (fun c ->
-               (Random.bits (Random.self_init ()), c)) d in
-  let sond = List.sort compare nd in
-  List.map snd sond;;
+let board_eval user map =
+  Array.mapi
+    (fun i x ->
+      (Array.mapi
+        (fun j y -> if y = user
+                    then eval_array.(i).(j)
+                    else 0)
+        x |> Array.fold_left (fun asm z -> asm + z) 0))
+    map
+  |> Array.fold_left (fun asm z -> asm + z) 0
 
-let rec cpu_battle map user =
-  let ps = panel_to_string user in
-  let _ = print_endline (ps ^ ">") in
+let choice_random user map =
   let moves = can_put_ptr user map in
-  let _ = List.iter (fun (x,y) -> Printf.printf "%d-%d\n" x y) moves in
-  let en = enemy_panel user in
+  if List.length moves > 0
+  then Some(shuffle moves |> List.hd)
+  else None
+
+(* 二手先しか読まないやつ。 *)
+(* n手先読めるような関数を新たに作るか、これを修正したい。 *)
+let choice_min_max_move user map =
+  let moves = can_put_ptr user map in
+  if List.length moves <= 0
+  then None
+  else
+    let en = enemy_panel user in
+    let (pair, _) = List.map
+                      (fun (x,y) ->
+                        ((x,y), List.fold_left
+                                  (* ここらへんおかしい *)
+                                  (fun acm (i,j) ->
+                                    acm + board_eval en (set_eval i j user map))
+                                  0
+                                  (can_put_ptr en (set_eval x y user map)))
+                      )
+                      moves
+                    |> List.sort (fun (_, ascore) (_, bscore) -> Int.compare ascore bscore)
+                    |> List.hd in
+    Some(pair);;
+
+(* 配置可能な座標取得 -> moves
+# movesすべてを走査
+* -> set_evalして裏返したマップ取得
+* 	-> そのマップからさらに敵の打てる手すべてを算出
+*		-> 算出したマップを評価(Intを返す)
+	-> 一回目に裏返した手ごとに評価点を合計。
+*)
+
+let dim_deep_copy dary =
+  Array.map (fun x -> Array.map (fun y -> y) x) dary
+
+let cpu_choice user map choice_f =
+  match choice_f user (dim_deep_copy map) with
+  | Some(x,y) ->
+     set_eval x y user map
+  | None -> map;;
+
+let rec cpu_battle_main map user_choice_f enemy_choice_f turn =
+  let _ = print_endline ((panel_to_string turn) ^ ">") in
+  let _ = print_pretty_map map in
   if is_finish map
   then
     let _ = score_closure map (fun w l wu ->
         Printf.printf "winner:%s win_cnt=%d, lose_cnt=%d\n"
-          (panel_to_string wu)
-          w
-          l) in
+          (panel_to_string wu) w l) in
     print_endline "finish."
   else
-    if (List.length moves) + (List.length (can_put_ptr en map)) <= 0
+    let moves = can_put_ptr turn map in
+    let enemy = enemy_panel turn in
+    if (List.length moves) + (List.length (can_put_ptr enemy map)) <= 0
     then print_endline "no moves"
     else
-      (* let _ = Unix.sleep 3 in *)
-      if List.length moves <= 0
-      then cpu_battle map en
-      else
-        let move = shuffle moves |> List.hd in
-        let (x,y) = move in
-        let set_map = set x y user map in
-        let umap = around_turn_over_line x y user set_map in
-        let _ = Printf.printf "%s => %d-%d\n" ps x y in
-        let _ = print_pretty_map umap in
-        cpu_battle umap en;;
-
-let cpu_battle_start =
-  let map = default_gen_map in
-  let _ = print_pretty_map map in
-  cpu_battle map Fst;;
+      let choice_f = if turn = Fst
+                     then user_choice_f
+                     else enemy_choice_f in
+      let m = cpu_choice turn map choice_f in
+      cpu_battle_main m user_choice_f enemy_choice_f enemy;;
