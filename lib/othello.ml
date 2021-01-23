@@ -13,6 +13,9 @@ let eval_array = [|
     [| 120; -20; 20;  5;  5; 20; -20; 120; |];
   |];;
 
+let dim_deep_copy dary =
+  Array.map (fun x -> Array.map (fun y -> y) x) dary
+
 let shuffle d =
   let nd = List.map (fun c ->
                (Random.bits (Random.self_init ()), c)) d in
@@ -150,13 +153,13 @@ let around_turn_over_line x y user map =
   let indexes = [| -1; 0; 1; |] in
   let m = ref map in
   let _ = Array.iter
-    (fun i ->
-      Array.iter
-        (fun j -> if x == 0 && y == 0
-                  then ()
-                  else m := turn_over_line x y i j user !m)
-        indexes)
-    indexes in
+            (fun i ->
+              Array.iter
+                (fun j -> if x == 0 && y == 0
+                          then ()
+                          else m := turn_over_line x y i j user !m)
+                indexes)
+            indexes in
   !m;;
 
 let can_put user map f =
@@ -216,10 +219,10 @@ let board_eval user map =
   Array.mapi
     (fun i x ->
       (Array.mapi
-        (fun j y -> if y = user
-                    then eval_array.(i).(j)
-                    else 0)
-        x |> Array.fold_left (fun asm z -> asm + z) 0))
+         (fun j y -> if y = user
+                     then eval_array.(i).(j)
+                     else 0)
+         x |> Array.fold_left (fun asm z -> asm + z) 0))
     map
   |> Array.fold_left (fun asm z -> asm + z) 0
 
@@ -251,16 +254,48 @@ let choice_min_max_move user map =
                     |> List.hd in
     Some(pair);;
 
-(* 配置可能な座標取得 -> moves
-# movesすべてを走査
-* -> set_evalして裏返したマップ取得
-* 	-> そのマップからさらに敵の打てる手すべてを算出
-*		-> 算出したマップを評価(Intを返す)
-	-> 一回目に裏返した手ごとに評価点を合計。
-*)
+let rec emp c =
+  if c > 0
+  then " " ^ emp (c-1)
+  else "";;
 
-let dim_deep_copy dary =
-  Array.map (fun x -> Array.map (fun y -> y) x) dary
+let choice_min_max_move_cnt cnt user map =
+  let moves = can_put_ptr user map in
+  if List.length moves <= 0
+  then None
+  else
+    let rec f u m c =
+      let mvs = can_put_ptr u m in
+      if c > 0 && List.length mvs > 0
+      then
+        let en = enemy_panel u in
+        let pairs = List.map
+                      (fun (x,y) ->
+                        let sum = f en (set_eval x y u m) (c-1) in
+                        sum
+                      )
+                      mvs in
+        let len = List.length pairs in
+        (List.fold_left (+) 0 pairs) / len
+      else
+        board_eval (enemy_panel user) m
+    in
+    let first_f u m c =
+      let mvs = can_put_ptr u m in
+      let en = enemy_panel u in
+      let rst = List.map
+                        (fun (x,y) ->
+                          ((x,y), f en (set_eval x y u m) (c-1))
+                        )
+                        mvs
+                      |> List.sort
+                           (fun (_, ascore) (_, bscore) ->
+                             Int.compare ascore bscore) in
+      let (pair, _) = List.hd rst in
+      (* let (x,y) = pair in *)
+      (* let _ = Printf.printf "[choose] %d, %d => %d\n" x y score in *)
+      Some(pair) in
+    first_f user map cnt;;
 
 let cpu_choice user map choice_f =
   match choice_f user (dim_deep_copy map) with
@@ -269,13 +304,13 @@ let cpu_choice user map choice_f =
   | None -> map;;
 
 let rec cpu_battle_main map user_choice_f enemy_choice_f turn =
-  let _ = print_endline ((panel_to_string turn) ^ ">") in
-  let _ = print_pretty_map map in
+  (* let _ = print_endline ((panel_to_string turn) ^ ">") in
+   * let _ = print_pretty_map map in *)
   if is_finish map
   then
-    let _ = score_closure map (fun w l wu ->
-        Printf.printf "winner:%s win_cnt=%d, lose_cnt=%d\n"
-          (panel_to_string wu) w l) in
+    let _ = score_closure map (fun fst snd wu ->
+                Printf.printf "winner:%s fst_cnt=%d, snd_cnt=%d\n"
+                  (panel_to_string wu) fst snd) in
     print_endline "finish."
   else
     let moves = can_put_ptr turn map in
