@@ -278,7 +278,7 @@ let choice_min_max_move_cnt cnt user map =
                       mvs in
         List.sort (fun a b -> Int.compare a b) pairs |> choice
       else
-        board_eval (enemy_panel user) m
+        board_eval u m
     in
     let first_f u m c =
       let mvs = can_put_ptr u m in
