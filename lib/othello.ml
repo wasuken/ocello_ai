@@ -268,6 +268,7 @@ let choice_min_max_move_cnt cnt user map =
       let mvs = can_put_ptr u m in
       if c > 0 && List.length mvs > 0
       then
+        let choice l = List.hd (if user = u then List.rev l else l) in
         let en = enemy_panel u in
         let pairs = List.map
                       (fun (x,y) ->
@@ -275,8 +276,7 @@ let choice_min_max_move_cnt cnt user map =
                         sum
                       )
                       mvs in
-        let len = List.length pairs in
-        (List.fold_left (+) 0 pairs) / len
+        List.sort (fun a b -> Int.compare a b) pairs |> choice
       else
         board_eval (enemy_panel user) m
     in
